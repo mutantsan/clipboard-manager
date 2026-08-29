@@ -6,6 +6,14 @@ A lightweight, terminal-based clipboard manager for Linux built with Rust. Desig
 [![Rust](https://img.shields.io/badge/language-Rust-orange.svg)](https://www.rust-lang.org/)
 [![Docs](https://img.shields.io/badge/docs-deepwiki-purple.svg)](https://deepwiki.com/Grenish/clipboard-manager)
 
+> [!NOTE]
+> Clipboard Manager is no longer under active development and is no longer being maintained. While the project gained some traction, it wasn't enough to justify continued development.
+> 
+> The application will remain available to download and use, but no new features or major updates are planned. If you encounter any issues, you're still welcome to open an issue on GitHub, and I'll do my best to help resolve it.
+>
+> Going forward, only critical bug fixes and patches for reported issues may be released. No major feature updates or enhancements are planned.
+
+
 ## Features
 
 - **Clipboard history** — last 50 entries, text & images
