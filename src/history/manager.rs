@@ -6,7 +6,6 @@ use std::sync::{Arc, Mutex};
 
 use crate::models::{ClipboardContentType, ClipboardEntry, ImageInfo};
 use crate::utils::{HISTORY_FILE, IMAGES_DIR, MAX_HISTORY, format_size};
-use chrono::Utc;
 
 // ============================================================================
 // CLIPBOARD HISTORY MANAGER
@@ -64,14 +63,23 @@ impl ClipboardHistory {
             }
         }
 
-        while loaded_entries.len() > MAX_HISTORY {
-            loaded_entries.pop_back();
+        // Trim history, but never evict pinned entries: only the oldest
+        // unpinned entries count against MAX_HISTORY.
+        let unpinned_count = loaded_entries.iter().filter(|e| !e.pinned).count();
+        let mut to_remove = unpinned_count.saturating_sub(MAX_HISTORY);
+        while to_remove > 0 {
+            if let Some(pos) = loaded_entries.iter().rposition(|e| !e.pinned) {
+                let removed = loaded_entries.remove(pos).unwrap();
+                if removed.content_type == ClipboardContentType::Image {
+                    let _ = fs::remove_file(self.images_dir.join(&removed.content));
+                }
+                to_remove -= 1;
+            } else {
+                break;
+            }
         }
 
         *self.entries.lock().unwrap() = loaded_entries;
-
-        // Remove any expired secrets
-        self.cleanup_expired();
     }
 
     pub fn add_text(&self, content: String) {
@@ -213,83 +221,6 @@ impl ClipboardHistory {
         // Stable sort: pinned items float to the top, preserving relative order within each group
         result.sort_by(|a, b| b.pinned.cmp(&a.pinned));
         result
-    }
-
-    /// Remove entries whose secret expiry has passed.
-    /// Called automatically during reload() and can be called periodically.
-    pub fn cleanup_expired(&self) {
-        let mut entries = self.entries.lock().unwrap();
-        let now = Utc::now().timestamp();
-
-        let had_expired = entries.iter().any(|e| {
-            if let Some(ref info) = e.secret_info {
-                if let Some(expires_at) = info.expires_at {
-                    return now >= expires_at;
-                }
-            }
-            false
-        });
-
-        if !had_expired {
-            return;
-        }
-
-        // Collect image filenames of expired entries before removing
-        let expired_images: Vec<String> = entries
-            .iter()
-            .filter(|e| {
-                if let Some(ref info) = e.secret_info {
-                    if let Some(expires_at) = info.expires_at {
-                        return now >= expires_at;
-                    }
-                }
-                false
-            })
-            .filter(|e| e.content_type == ClipboardContentType::Image)
-            .map(|e| e.content.clone())
-            .collect();
-
-        // Remove expired entries
-        entries.retain(|e| {
-            if let Some(ref info) = e.secret_info {
-                if let Some(expires_at) = info.expires_at {
-                    return now < expires_at;
-                }
-            }
-            true
-        });
-
-        // Clean up image files
-        for filename in &expired_images {
-            let _ = std::fs::remove_file(self.images_dir.join(filename));
-        }
-
-        drop(entries);
-
-        if had_expired {
-            self.rewrite_history();
-            println!("✓ Cleaned up expired secrets");
-        }
-    }
-
-    /// Stop the auto-expiry timer on a secret entry (makes it permanent).
-    /// `index` is the position in the sorted (pinned-first) view returned by get_all().
-    pub fn stop_expiry(&self, index: usize) {
-        self.reload();
-        let sorted = self.get_all();
-        if index >= sorted.len() {
-            return;
-        }
-        let target_hash = sorted[index].content_hash;
-
-        let mut entries = self.entries.lock().unwrap();
-        if let Some(entry) = entries.iter_mut().find(|e| e.content_hash == target_hash) {
-            if let Some(ref mut info) = entry.secret_info {
-                info.expires_at = None;
-            }
-        }
-        drop(entries);
-        self.rewrite_history();
     }
 
     pub fn toggle_pin(&self, index: usize) {

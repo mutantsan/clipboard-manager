@@ -1,7 +1,18 @@
 [package]
-name = "clipboard-manager"
-version = "0.1.6"
+name = "clipboard-manager-ms"
+version = "0.1.0"
 edition = "2024"
+description = "A lightweight terminal-based clipboard manager for Linux with pinning, secret detection, and an emoji picker (fork of clipboard-manager)"
+license = "MIT"
+repository = "https://github.com/mutantsan/clipboard-manager"
+readme = "README.md"
+keywords = ["clipboard", "tui", "wayland", "hyprland", "ratatui"]
+categories = ["command-line-utilities"]
+exclude = ["install.sh", "PKGBUILD", "dia.svg", ".github/"]
+
+[[bin]]
+name = "clipboard-manager-ms"
+path = "src/main.rs"
 
 [dependencies]
 arboard = "3.6.1"

@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
-use crate::utils::{SECRET_EXPIRY_SECS, format_size};
+use crate::utils::format_size;
 
 // ============================================================================
 // DATA STRUCTURES
@@ -18,9 +18,6 @@ pub enum ClipboardContentType {
 pub struct SecretInfo {
     /// The detected provider name (e.g., "OpenAI", "GitHub", "AWS")
     pub provider: String,
-    /// Unix timestamp when this secret expires and should be auto-deleted.
-    /// None means expiry has been stopped by the user.
-    pub expires_at: Option<i64>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -90,52 +87,13 @@ impl ClipboardEntry {
         self.content_hash = hasher.finish();
     }
 
-    /// Returns true if this secret has expired.
-    #[allow(dead_code)]
-    pub fn is_expired(&self) -> bool {
-        if let Some(ref info) = self.secret_info {
-            if let Some(expires_at) = info.expires_at {
-                return chrono::Utc::now().timestamp() >= expires_at;
-            }
-        }
-        false
-    }
-
     /// Returns true if this entry is a detected secret.
     pub fn is_secret(&self) -> bool {
         self.secret_info.is_some()
     }
 
-    /// Returns the remaining seconds until expiry, or None if no expiry is set.
-    pub fn expiry_remaining_secs(&self) -> Option<i64> {
-        if let Some(ref info) = self.secret_info {
-            if let Some(expires_at) = info.expires_at {
-                let remaining = expires_at - chrono::Utc::now().timestamp();
-                return Some(if remaining > 0 { remaining } else { 0 });
-            }
-        }
-        None
-    }
-
-    /// Format the expiry countdown as a human-readable string.
-    pub fn expiry_label(&self) -> Option<String> {
-        if let Some(remaining) = self.expiry_remaining_secs() {
-            let mins = remaining / 60;
-            let secs = remaining % 60;
-            if mins > 0 {
-                Some(format!("Expires in {}m {:02}s", mins, secs))
-            } else {
-                Some(format!("Expires in {}s", secs))
-            }
-        } else if self.is_secret() {
-            Some("No expiry".to_string())
-        } else {
-            None
-        }
-    }
-
     /// Detect if the content is a secret/sensitive value.
-    /// Returns Some(SecretInfo) with the provider name and an expiry timestamp if detected.
+    /// Returns Some(SecretInfo) with the provider name if detected.
     fn detect_secret(content: &str) -> Option<SecretInfo> {
         let trimmed = content.trim();
 
@@ -149,17 +107,13 @@ impl ClipboardEntry {
 
         // Provider-specific prefix detection
         if let Some(provider) = Self::detect_secret_provider(trimmed) {
-            return Some(SecretInfo {
-                provider,
-                expires_at: Some(chrono::Utc::now().timestamp() + SECRET_EXPIRY_SECS),
-            });
+            return Some(SecretInfo { provider });
         }
 
         // Private key block detection (multi-line is OK for keys)
         if trimmed.starts_with("-----BEGIN") && trimmed.contains("PRIVATE KEY") {
             return Some(SecretInfo {
                 provider: "Private Key".to_string(),
-                expires_at: Some(chrono::Utc::now().timestamp() + SECRET_EXPIRY_SECS),
             });
         }
 
@@ -170,7 +124,6 @@ impl ClipboardEntry {
         {
             return Some(SecretInfo {
                 provider: "Google Cloud".to_string(),
-                expires_at: Some(chrono::Utc::now().timestamp() + SECRET_EXPIRY_SECS),
             });
         }
 
@@ -178,7 +131,6 @@ impl ClipboardEntry {
         if line_count == 1 && Self::looks_like_generic_secret(trimmed) {
             return Some(SecretInfo {
                 provider: "Secret".to_string(),
-                expires_at: Some(chrono::Utc::now().timestamp() + SECRET_EXPIRY_SECS),
             });
         }
 
@@ -566,8 +518,7 @@ impl ClipboardEntry {
 
         // Special handling for secrets
         if let Some(ref secret) = self.secret_info {
-            let expiry = self.expiry_label().unwrap_or_default();
-            return format!("{}🔒 Secret · {} · {}", pin_prefix, secret.provider, expiry);
+            return format!("{}🔒 Secret · {}", pin_prefix, secret.provider);
         }
 
         let (icon, label) = self.detect_category();

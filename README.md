@@ -21,7 +21,7 @@ A lightweight, terminal-based clipboard manager for Linux built with Rust. Desig
 - **Persistent history** across reboots
 - **Pinning** — pin important entries so they always appear at the top and are never evicted
 - **Smart content detection** — automatically categorizes entries as 🔗 Link, 📧 Email, 🎨 Color, 📁 Path, 📞 Phone, 💻 Code, or 📝 Text
-- **Sensitive content detection** — detects API keys, tokens, private keys, JWTs, and credit card numbers; masks them by default with auto-expiry (5 min)
+- **Sensitive content detection** — detects API keys, tokens, private keys, JWTs, and credit card numbers; masks them by default
 - **Emoji/emoticon picker** — browse 8 categories in a grid layout, search by name, and paste with Enter
 - **Auto-detection** of Hyprland with floating window rules
 - **Background daemon** + `ratatui` TUI
@@ -90,7 +90,6 @@ The daemon auto-creates `~/.local/share/clipboard-manager/trigger.sh` on first r
 | `/` | Search clipboard history |
 | `P` | Toggle pin on selected entry |
 | `R` | Reveal / hide a masked secret |
-| `⇧S` | Stop auto-expiry on a secret (make permanent) |
 | `E` | Open emoji picker |
 | `C` | Clear all history (with confirmation) |
 | `Esc` / `q` | Quit |
@@ -131,8 +130,7 @@ The clipboard manager detects sensitive content and protects it automatically:
 - **Detected providers**: OpenAI, GitHub, AWS, Slack, Stripe, Google/Gemini, and more
 - **Detected patterns**: API key prefixes, private key blocks, JWTs, Bearer tokens, credit card numbers (Luhn check), high-entropy secrets
 - **Auto-masking**: secrets are displayed as `••••••••` by default
-- **Auto-expiry**: secrets are automatically deleted after 5 minutes
-- **Controls**: press `R` to reveal, `⇧S` to stop expiry
+- **Controls**: press `R` to reveal / hide a masked secret
 
 ## Hyprland Troubleshooting
 
@@ -155,9 +153,9 @@ windowrulev2 = center, class:(floating-clipboard)
 - **Storage**: `~/.local/share/clipboard-manager/`
 - **History**: `clipboard_history.jsonl` (JSONL format, unencrypted)
 - **Images**: `images/` subdirectory
-- **Secrets**: auto-expire after 5 minutes; masked in the TUI by default
+- **Secrets**: masked in the TUI by default; reveal with `R`
 
-Clipboard content is stored in plain text. Be mindful when copying sensitive data. Detected secrets are automatically cleaned up after expiry.
+Clipboard content is stored in plain text. Be mindful when copying sensitive data.
 
 ## Uninstall
 

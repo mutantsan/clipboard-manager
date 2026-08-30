@@ -1,5 +1,5 @@
 use crossterm::{
-    event::{self, Event as CrosstermEvent, KeyCode, KeyModifiers},
+    event::{self, Event as CrosstermEvent, KeyCode},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
@@ -173,9 +173,6 @@ pub fn show_ui(backend: ClipboardBackend) -> Result<(), Box<dyn std::error::Erro
     let emoji_cats = emoji::categories();
 
     loop {
-        // Clean up any expired secrets each tick
-        history.cleanup_expired();
-
         // Filter entries based on search query
         let all_entries = history.get_all();
         let filtered_entries: Vec<&crate::models::ClipboardEntry> =
@@ -418,9 +415,6 @@ pub fn show_ui(backend: ClipboardBackend) -> Result<(), Box<dyn std::error::Erro
                     footer_spans.push(Span::styled("|", sep_style));
                     footer_spans.push(Span::styled(" R", key_style));
                     footer_spans.push(Span::styled(" Reveal ", text_style));
-                    footer_spans.push(Span::styled("|", sep_style));
-                    footer_spans.push(Span::styled(" ⇧S", key_style));
-                    footer_spans.push(Span::styled(" Keep ", text_style));
                 }
 
                 footer_spans.push(Span::styled("|", sep_style));
@@ -955,20 +949,6 @@ pub fn show_ui(backend: ClipboardBackend) -> Result<(), Box<dyn std::error::Erro
                         KeyCode::Char('q') | KeyCode::Esc => app_state.quit(),
                         KeyCode::Char('c') | KeyCode::Char('C') if entries_len > 0 => {
                             app_state.show_clear_confirm = true;
-                        }
-                        // Shift+S: stop expiry on a secret entry
-                        KeyCode::Char('S')
-                            if key.modifiers.contains(KeyModifiers::SHIFT) && entries_len > 0 =>
-                        {
-                            if let Some(index) = app_state.list_state.selected() {
-                                if !app_state.is_searching {
-                                    if let Some(entry) = filtered_entries.get(index) {
-                                        if entry.is_secret() {
-                                            history.stop_expiry(index);
-                                        }
-                                    }
-                                }
-                            }
                         }
                         KeyCode::Char('s') => {
                             // Enter Search Mode (lowercase s only)
