@@ -19,7 +19,7 @@ A lightweight, terminal-based clipboard manager for Linux built with Rust. Desig
 - **Clipboard history** — last 50 entries, text & images
 - **Smart deduplication** — re-copied content moves to top
 - **Persistent history** across reboots
-- **Pinning** — pin important entries so they always appear at the top and are never evicted
+- **Pinning** — pin important entries so they always appear at the top, are never evicted, and survive "clear all"
 - **Smart content detection** — automatically categorizes entries as 🔗 Link, 📧 Email, 🎨 Color, 📁 Path, 📞 Phone, 💻 Code, or 📝 Text
 - **Sensitive content detection** — detects API keys, tokens, private keys, JWTs, and credit card numbers; masks them by default
 - **Emoji/emoticon picker** — browse 8 categories in a grid layout, search by name, and paste with Enter
@@ -91,7 +91,7 @@ The daemon auto-creates `~/.local/share/clipboard-manager/trigger.sh` on first r
 | `P` | Toggle pin on selected entry |
 | `R` | Reveal / hide a masked secret |
 | `E` | Open emoji picker |
-| `C` | Clear all history (with confirmation) |
+| `C` | Clear all history except pinned entries (with confirmation) |
 | `Esc` / `q` | Quit |
 
 ### Emoji Picker

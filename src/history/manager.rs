@@ -243,21 +243,26 @@ impl ClipboardHistory {
     }
 
     pub fn clear(&self) {
+        // Reload from disk first so we act on the latest state (the daemon may
+        // have added entries since the TUI last loaded).
+        self.reload();
+
         let mut entries = self.entries.lock().unwrap();
 
-        // Remove all image files
+        // Remove image files only for the entries we are about to drop.
+        // Pinned entries are kept, so keep their images too.
         for entry in entries.iter() {
-            if entry.content_type == ClipboardContentType::Image {
+            if !entry.pinned && entry.content_type == ClipboardContentType::Image {
                 let _ = fs::remove_file(self.images_dir.join(&entry.content));
             }
         }
 
-        entries.clear();
+        // Keep pinned entries, drop everything else.
+        entries.retain(|e| e.pinned);
         drop(entries);
 
-        // Truncate file
-        let history_path = self.data_dir.join(HISTORY_FILE);
-        let _ = fs::File::create(history_path); // Create truncates
+        // Persist the trimmed history (truncates the file, then writes what's left).
+        self.rewrite_history();
 
         println!("✓ Cleared all history");
     }
@@ -328,5 +333,57 @@ impl ClipboardHistory {
 
     pub fn images_dir(&self) -> &PathBuf {
         &self.images_dir
+    }
+
+    #[cfg(test)]
+    fn with_data_dir(data_dir: PathBuf) -> Self {
+        let images_dir = data_dir.join(IMAGES_DIR);
+        fs::create_dir_all(&images_dir).ok();
+        let history = Self {
+            entries: Arc::new(Mutex::new(VecDeque::with_capacity(MAX_HISTORY))),
+            data_dir,
+            images_dir,
+        };
+        history.reload();
+        history
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn write_history(dir: &PathBuf, lines: &[&str]) {
+        fs::write(dir.join(HISTORY_FILE), lines.join("\n") + "\n").unwrap();
+    }
+
+    #[test]
+    fn clear_keeps_pinned_entries() {
+        let dir = std::env::temp_dir().join(format!("cm-test-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        write_history(
+            &dir,
+            &[
+                r#"{"content_type":"Text","content":"pinned one","timestamp":1,"pinned":true}"#,
+                r#"{"content_type":"Text","content":"junk a","timestamp":2,"pinned":false}"#,
+                r#"{"content_type":"Text","content":"junk b","timestamp":3,"pinned":false}"#,
+            ],
+        );
+
+        let history = ClipboardHistory::with_data_dir(dir.clone());
+        history.clear();
+
+        let remaining = history.get_all();
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].content, "pinned one");
+        assert!(remaining[0].pinned);
+
+        // And it survives a reload from disk.
+        let reloaded = ClipboardHistory::with_data_dir(dir.clone());
+        let after = reloaded.get_all();
+        assert_eq!(after.len(), 1);
+        assert_eq!(after[0].content, "pinned one");
+
+        fs::remove_dir_all(&dir).ok();
     }
 }

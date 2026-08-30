@@ -444,8 +444,12 @@ pub fn show_ui(backend: ClipboardBackend) -> Result<(), Box<dyn std::error::Erro
                     )),
                     Line::from(""),
                     Line::from(Span::styled(
-                        "This will permanently delete all clipboard entries and images.",
+                        "This will permanently delete all unpinned clipboard entries and images.",
                         Style::default().fg(Color::White),
+                    )),
+                    Line::from(Span::styled(
+                        "Pinned entries are kept.",
+                        Style::default().fg(Color::Gray),
                     )),
                     Line::from(""),
                     Line::from(Span::styled(
