@@ -6,4 +6,5 @@ pub const MAX_HISTORY: usize = 50;
 pub const POLL_INTERVAL_MS: u64 = 150;
 pub const HISTORY_FILE: &str = "clipboard_history.jsonl";
 pub const PID_FILE: &str = "clipboard_manager.pid";
+pub const UI_LOCK_FILE: &str = "ui.lock";
 pub const IMAGES_DIR: &str = "images";

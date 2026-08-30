@@ -160,6 +160,19 @@ fn render_emoji_grid(
 pub fn show_ui(backend: ClipboardBackend) -> Result<(), Box<dyn std::error::Error>> {
     let history = ClipboardHistory::new();
 
+    // Only one clipboard window may be live at a time. If another instance is
+    // already running (e.g. the hotkey was pressed repeatedly), refocus it and
+    // exit instead of stacking another window. The guard releases the lock on
+    // any exit path.
+    let _ui_lock = match crate::utils::acquire_ui_lock(history.data_dir()) {
+        crate::utils::UiLockResult::AlreadyRunning => {
+            crate::utils::focus_existing_ui();
+            return Ok(());
+        }
+        crate::utils::UiLockResult::Acquired(guard) => Some(guard),
+        crate::utils::UiLockResult::Unavailable => None,
+    };
+
     enable_raw_mode()?;
     let mut stdout = std::io::stdout();
     execute!(stdout, EnterAlternateScreen)?;

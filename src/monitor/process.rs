@@ -8,7 +8,7 @@ use crate::clipboard::{
     ClipboardBackend, get_clipboard_image, get_clipboard_text, get_clipboard_types,
 };
 use crate::history::ClipboardHistory;
-use crate::utils::{PID_FILE, POLL_INTERVAL_MS};
+use crate::utils::{PID_FILE, POLL_INTERVAL_MS, UI_LOCK_FILE};
 
 // ============================================================================
 // PID FILE MANAGEMENT
@@ -34,6 +34,17 @@ pub fn create_trigger_script(data_dir: &PathBuf, binary_path: &str) -> Result<()
         r#"#!/bin/bash
 BINARY="{}"
 
+# Single-instance guard: if a clipboard UI is already open, just refocus it
+# (Hyprland) and bail out instead of spawning another terminal window.
+DATA_DIR="${{XDG_DATA_HOME:-$HOME/.local/share}}/clipboard-manager"
+LOCK_FILE="$DATA_DIR/{}"
+if [ -f "$LOCK_FILE" ] && kill -0 "$(cat "$LOCK_FILE" 2>/dev/null)" 2>/dev/null; then
+    if [ -n "$HYPRLAND_INSTANCE_SIGNATURE" ] && command -v hyprctl &> /dev/null; then
+        hyprctl dispatch focuswindow "class:floating-clipboard" > /dev/null 2>&1
+    fi
+    exit 0
+fi
+
 if command -v kitty &> /dev/null; then
     kitty --class floating-clipboard \
           --title "Clipboard Manager" \
@@ -56,7 +67,7 @@ else
     notify-send "Clipboard Manager" "No suitable terminal found"
 fi
 "#,
-        binary_path
+        binary_path, UI_LOCK_FILE
     );
 
     fs::write(&script_path, script_content)?;
