@@ -18,7 +18,7 @@ use crate::models::ClipboardContentType;
 use crate::ui::app::AppState;
 use crate::ui::emoji;
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 // ============================================================================
 // EMOJI GRID RENDERER
@@ -185,7 +185,17 @@ pub fn show_ui(backend: ClipboardBackend) -> Result<(), Box<dyn std::error::Erro
     // Build emoji categories once outside the loop
     let emoji_cats = emoji::categories();
 
+    // The daemon runs in a separate process and appends new clips to disk while
+    // this window is open. Re-read the history from disk periodically so freshly
+    // copied entries (and pin changes) show up without reopening the window.
+    let mut last_reload = Instant::now();
+
     loop {
+        if last_reload.elapsed() >= Duration::from_millis(300) {
+            history.reload();
+            last_reload = Instant::now();
+        }
+
         // Filter entries based on search query
         let all_entries = history.get_all();
         let filtered_entries: Vec<&crate::models::ClipboardEntry> =

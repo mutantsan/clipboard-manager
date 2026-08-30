@@ -91,7 +91,7 @@ impl ClipboardHistory {
         // Reload from disk to pick up any changes made by TUI (e.g., pins)
         self.reload();
 
-        let entry = ClipboardEntry::new_text(trimmed_content.clone());
+        let mut entry = ClipboardEntry::new_text(trimmed_content.clone());
         let mut entries = self.entries.lock().unwrap();
 
         // Check for duplicate and remove if exists (move to top behavior)
@@ -100,7 +100,9 @@ impl ClipboardHistory {
             .iter()
             .position(|e| e.content_hash == entry.content_hash)
         {
-            entries.remove(pos);
+            let existing = entries.remove(pos).unwrap();
+            // Preserve pin state: re-copying a pinned entry must not un-pin it.
+            entry.pinned = existing.pinned;
             rewrite = true;
             // println!("  ↻ Moving duplicate text to top");
         }
@@ -444,6 +446,41 @@ mod tests {
         // A non-pinned entry can still be deleted.
         history.delete_entry(1);
         assert_eq!(history.get_all().len(), 1);
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn re_adding_pinned_text_keeps_pin() {
+        let dir = std::env::temp_dir().join(format!("cm-test-repin-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        write_history(
+            &dir,
+            &[
+                r#"{"content_type":"Text","content":"pinned one","timestamp":1,"pinned":true}"#,
+                r#"{"content_type":"Text","content":"junk a","timestamp":2,"pinned":false}"#,
+            ],
+        );
+
+        let history = ClipboardHistory::with_data_dir(dir.clone());
+        // Simulate the user copying the already-pinned entry again.
+        history.add_text("pinned one".to_string());
+
+        let all = history.get_all();
+        let pinned_entry = all.iter().find(|e| e.content == "pinned one").unwrap();
+        assert!(pinned_entry.pinned, "re-copying a pinned entry must keep it pinned");
+        assert_eq!(all.iter().filter(|e| e.content == "pinned one").count(), 1);
+
+        // Survives a reload from disk.
+        let reloaded = ClipboardHistory::with_data_dir(dir.clone());
+        assert!(
+            reloaded
+                .get_all()
+                .iter()
+                .find(|e| e.content == "pinned one")
+                .unwrap()
+                .pinned
+        );
 
         fs::remove_dir_all(&dir).ok();
     }

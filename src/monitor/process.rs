@@ -40,7 +40,11 @@ DATA_DIR="${{XDG_DATA_HOME:-$HOME/.local/share}}/clipboard-manager"
 LOCK_FILE="$DATA_DIR/{}"
 if [ -f "$LOCK_FILE" ] && kill -0 "$(cat "$LOCK_FILE" 2>/dev/null)" 2>/dev/null; then
     if [ -n "$HYPRLAND_INSTANCE_SIGNATURE" ] && command -v hyprctl &> /dev/null; then
-        hyprctl dispatch focuswindow "class:floating-clipboard" > /dev/null 2>&1
+        # Hyprland's Lua config (e.g. Omarchy) rejects the classic
+        # "dispatch focuswindow class:..." syntax, so try the Lua dispatcher
+        # first and fall back to the classic one for stock Hyprland.
+        hyprctl dispatch 'hl.dsp.focus({{ window = "class:floating-clipboard" }})' > /dev/null 2>&1 \
+            || hyprctl dispatch focuswindow "class:floating-clipboard" > /dev/null 2>&1
     fi
     exit 0
 fi

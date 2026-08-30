@@ -82,9 +82,21 @@ pub fn focus_existing_ui() {
         return;
     }
 
-    let _ = Command::new("hyprctl")
-        .args(["dispatch", "focuswindow", "class:floating-clipboard"])
-        .status();
+    // Hyprland's Lua config (e.g. Omarchy) rejects the classic
+    // `dispatch focuswindow class:...` syntax and errors out, so try the Lua
+    // dispatcher first and fall back to the classic one for stock Hyprland.
+    let lua_focused = Command::new("hyprctl")
+        .arg("dispatch")
+        .arg(r#"hl.dsp.focus({ window = "class:floating-clipboard" })"#)
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+
+    if !lua_focused {
+        let _ = Command::new("hyprctl")
+            .args(["dispatch", "focuswindow", "class:floating-clipboard"])
+            .status();
+    }
 }
 
 #[cfg(test)]
