@@ -77,21 +77,20 @@ fi
 // ============================================================================
 
 pub fn monitor_loop(history: Arc<ClipboardHistory>, backend: ClipboardBackend) {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
     println!("📋 Clipboard monitor started (Polling Fallback)");
 
-    let mut last_text_hash: Option<u64> = None;
-    let mut last_image_hash: Option<u64> = None;
-    let mut poll_count = 0u64;
+    // Hash of what the clipboard showed on the previous poll. Used purely to
+    // detect *changes* cheaply without touching disk while the clipboard sits
+    // idle; whether a change actually needs recording is decided by
+    // `history.is_latest_*`.
+    let mut last_seen_text: Option<u64> = None;
+    let mut last_seen_image: Option<u64> = None;
 
     loop {
         thread::sleep(Duration::from_millis(POLL_INTERVAL_MS));
-        poll_count += 1;
-
-        // Heartbeat every ~10 seconds
-        if poll_count % 67 == 0 {
-
-            // println!("💓 Monitor active - {} items in history", count);
-        }
 
         // Check for images first (higher priority)
         let types = get_clipboard_types(backend);
@@ -99,33 +98,33 @@ pub fn monitor_loop(history: Arc<ClipboardHistory>, backend: ClipboardBackend) {
 
         if has_image {
             if let Some(image_data) = get_clipboard_image(backend) {
-                use std::collections::hash_map::DefaultHasher;
-                use std::hash::{Hash, Hasher};
-
                 let mut hasher = DefaultHasher::new();
                 image_data.hash(&mut hasher);
                 let hash = hasher.finish();
 
-                if Some(hash) != last_image_hash {
-                    if let Err(e) = history.add_image(image_data) {
-                        eprintln!("Failed to add image: {}", e);
+                if Some(hash) != last_seen_image {
+                    last_seen_image = Some(hash);
+                    last_seen_text = None;
+                    // Skip only if it's already the newest entry; a manually
+                    // deleted image will not be, so it gets re-added.
+                    if !history.is_latest_image(&image_data) {
+                        if let Err(e) = history.add_image(image_data) {
+                            eprintln!("Failed to add image: {}", e);
+                        }
                     }
-                    last_image_hash = Some(hash);
-                    last_text_hash = None;
                 }
             }
         } else if let Some(content) = get_clipboard_text(backend) {
-            use std::collections::hash_map::DefaultHasher;
-            use std::hash::{Hash, Hasher};
-
             let mut hasher = DefaultHasher::new();
             content.hash(&mut hasher);
             let hash = hasher.finish();
 
-            if Some(hash) != last_text_hash {
-                history.add_text(content);
-                last_text_hash = Some(hash);
-                last_image_hash = None;
+            if Some(hash) != last_seen_text {
+                last_seen_text = Some(hash);
+                last_seen_image = None;
+                if !history.is_latest_text(&content) {
+                    history.add_text(content);
+                }
             }
         }
     }

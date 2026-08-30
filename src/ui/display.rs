@@ -384,12 +384,12 @@ pub fn show_ui(backend: ClipboardBackend) -> Result<(), Box<dyn std::error::Erro
                 let sep_style = Style::default().fg(Color::DarkGray);
 
                 // Check if the currently selected entry is a secret to show contextual hints
-                let selected_is_secret = app_state
+                let selected_entry = app_state
                     .list_state
                     .selected()
-                    .and_then(|idx| filtered_entries.get(idx))
-                    .map(|e| e.is_secret())
-                    .unwrap_or(false);
+                    .and_then(|idx| filtered_entries.get(idx));
+                let selected_is_secret = selected_entry.map(|e| e.is_secret()).unwrap_or(false);
+                let selected_is_pinned = selected_entry.map(|e| e.pinned).unwrap_or(false);
 
                 let mut footer_spans = vec![
                     Span::styled("↑↓", key_style),
@@ -399,10 +399,13 @@ pub fn show_ui(backend: ClipboardBackend) -> Result<(), Box<dyn std::error::Erro
                     Span::styled(" Copy ", text_style),
                     Span::styled("|", sep_style),
                     Span::styled(" P", key_style),
-                    Span::styled(" Pin ", text_style),
+                    Span::styled(if selected_is_pinned { " Unpin " } else { " Pin " }, text_style),
                     Span::styled("|", sep_style),
                     Span::styled(" D", key_style),
-                    Span::styled(" Del ", text_style),
+                    Span::styled(
+                        if selected_is_pinned { " Del (unpin first) " } else { " Del " },
+                        text_style,
+                    ),
                     Span::styled("|", sep_style),
                     Span::styled(" S", key_style),
                     Span::styled(" Search ", text_style),
@@ -993,7 +996,13 @@ pub fn show_ui(backend: ClipboardBackend) -> Result<(), Box<dyn std::error::Erro
                             if entries_len > 0 =>
                         {
                             if let Some(index) = app_state.list_state.selected() {
-                                if !app_state.is_searching {
+                                // Pinned entries are protected from deletion;
+                                // the user must unpin (p) them first.
+                                let is_pinned = filtered_entries
+                                    .get(index)
+                                    .map(|e| e.pinned)
+                                    .unwrap_or(false);
+                                if !app_state.is_searching && !is_pinned {
                                     history.delete_entry(index);
                                     let new_len = history.get_all().len();
                                     if new_len == 0 {

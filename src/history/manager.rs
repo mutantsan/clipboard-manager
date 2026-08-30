@@ -215,6 +215,35 @@ impl ClipboardHistory {
         cleaned
     }
 
+    /// Returns true if the most-recently-added entry is text equal to
+    /// `content` (after trimming). The monitor uses this to skip clipboard
+    /// events that are already at the top of history, while still re-adding
+    /// content the user manually deleted.
+    pub fn is_latest_text(&self, content: &str) -> bool {
+        self.reload();
+        let trimmed = content.trim();
+        let entries = self.entries.lock().unwrap();
+        entries
+            .front()
+            .map(|e| e.content_type == ClipboardContentType::Text && e.content == trimmed)
+            .unwrap_or(false)
+    }
+
+    /// Returns true if the most-recently-added entry is an image whose stored
+    /// file holds exactly `image_data`.
+    pub fn is_latest_image(&self, image_data: &[u8]) -> bool {
+        self.reload();
+        let entries = self.entries.lock().unwrap();
+        let front = match entries.front() {
+            Some(f) if f.content_type == ClipboardContentType::Image => f,
+            _ => return false,
+        };
+        match fs::read(self.images_dir.join(&front.content)) {
+            Ok(bytes) => bytes == image_data,
+            Err(_) => false,
+        }
+    }
+
     pub fn get_all(&self) -> Vec<ClipboardEntry> {
         let entries = self.entries.lock().unwrap();
         let mut result: Vec<ClipboardEntry> = entries.iter().cloned().collect();
@@ -287,6 +316,11 @@ impl ClipboardHistory {
         self.reload();
         let sorted = self.get_all();
         if index >= sorted.len() {
+            return;
+        }
+        // Pinned entries are protected: they can only be removed by unpinning
+        // first, or via "clear all".
+        if sorted[index].pinned {
             return;
         }
         let target_hash = sorted[index].content_hash;
@@ -383,6 +417,57 @@ mod tests {
         let after = reloaded.get_all();
         assert_eq!(after.len(), 1);
         assert_eq!(after[0].content, "pinned one");
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn delete_entry_ignores_pinned() {
+        let dir = std::env::temp_dir().join(format!("cm-test-delpin-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        write_history(
+            &dir,
+            &[
+                r#"{"content_type":"Text","content":"pinned one","timestamp":1,"pinned":true}"#,
+                r#"{"content_type":"Text","content":"junk a","timestamp":2,"pinned":false}"#,
+            ],
+        );
+
+        let history = ClipboardHistory::with_data_dir(dir.clone());
+        // Sorted view puts the pinned entry at index 0.
+        history.delete_entry(0);
+
+        let remaining = history.get_all();
+        assert_eq!(remaining.len(), 2);
+        assert!(remaining.iter().any(|e| e.content == "pinned one"));
+
+        // A non-pinned entry can still be deleted.
+        history.delete_entry(1);
+        assert_eq!(history.get_all().len(), 1);
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn is_latest_text_tracks_deletions() {
+        let dir = std::env::temp_dir().join(format!("cm-test-latest-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        write_history(
+            &dir,
+            &[
+                r#"{"content_type":"Text","content":"older","timestamp":1,"pinned":false}"#,
+                r#"{"content_type":"Text","content":"newest","timestamp":2,"pinned":false}"#,
+            ],
+        );
+
+        let history = ClipboardHistory::with_data_dir(dir.clone());
+        assert!(history.is_latest_text("newest"));
+        assert!(history.is_latest_text("  newest \n"));
+        assert!(!history.is_latest_text("older"));
+
+        // After deleting it, re-copying the same text is no longer a no-op.
+        history.delete_entry(0);
+        assert!(!history.is_latest_text("newest"));
 
         fs::remove_dir_all(&dir).ok();
     }
